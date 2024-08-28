@@ -20,6 +20,6 @@ This project implements a Transformer model from scratch using PyTorch for Engli
 ### Installation
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/eng-fra-transformer.git
+   git clone https://github.com/your-username/transformer_from_scratch.git
    cd transformer_from_scratch
 
