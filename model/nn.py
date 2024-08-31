@@ -76,4 +76,59 @@ class ResidualConnection(nn.Module):
   # where sublayer(x) is the function implemented by the sub-layer itself
   def forward(self, x, sublayer):
     return self.norm(x + self.dropout(sublayer(x)))
+
+
+class MultiHeadAttention(nn.Module):
+  def __init__(self, d_model: int, h: int, dropout: float) -> None:
+    super().__init__()
+    self.d_model = d_model     # embedding dim
+    self.h = h                 # number of heads
+    assert d_model % h == 0, "d_model is not divisible by h"
     
+    
+    '''
+    [paper reference]: MultiHead(Q, K, V) = Concat(head1,...,headh)Wo
+                       where headi = Attention(QW_i^Q, KW_i^K, VW_i^V)
+    '''
+    self.d_k = d_model // h    # dimension of vector seen by each head
+    self.w_q = nn.Linear(d_model, d_model, bias=False)
+    self.w_k = nn.Linear(d_model, d_model, bias=False)
+    self.w_v = nn.Linear(d_model, d_model, bias=False)
+    self.w_o = nn.Linear(d_model, d_model, bias=False)
+    self.dropout = nn.Dropout(dropout)
+    
+  
+  @staticmethod
+  def attention(query, key, value, mask, dropout: nn.Dropout):
+    # Attention(Q, K, V) = softmax(QK^T/sqrt(d_k))V
+    d_k = query.shape[-1]
+    attention_scores = (query @ key.transpose(-2, -1)) / math.sqrt(d_k)
+    if mask is not None:
+      # apply mask by setting positions where mask == 0 to -inf
+      attention_scores.masked_fill(mask == 0, -1e9)
+    attention_scores = attention_scores.softmax(dim=-1)
+    if dropout is not None:
+      attention_scores = dropout(attention_scores)
+    attention_scores = attention_scores @ value
+    # final shape: (batch, h, seq_len, d_k)
+    return attention_scores
+
+  def forward(self, q, k, v, mask):
+    query = self.w_q(q)
+    key = self.w_k(k)
+    value = self.w_v(v)
+    
+    # (batch, seq_len, d_model) -> (batch, seq_len, h, d_k) -> (batch, h, seq_len, d_k)
+    query = query.view(query.shape[0], query.shape[1], self.h, self.d_k).transpose(1, 2)
+    key = key.view(key.shape[0], key.shape[1], self.h, self.d_k).transpose(1, 2)
+    value = value.view(value.shape[0], value.shape[1], self.h, self.d_k).transpose(1, 2)
+    
+    # calculate attention
+    attention_scores = MultiHeadAttention.attention(query, key, value, mask, self.dropout)
+    
+    # combine all heads together
+    # (batch, h, seq_len, d_k) -> (batch, seq_len, h, d_k) -> (batch, seq_len, d_model)
+    attention_scores = attention_scores.transpose(1, 2).contiguous().view(attention_scores.shape[0], attention_scores.shape[1], self.d_k * self.h )
+    
+    # multiply by Wo
+    return self.w_o(attention_scores)
