@@ -1,6 +1,11 @@
 import torch
 from torch.utils.data import Dataset
 
+def causal_mask(size):
+	mask = torch.triu(torch.ones((1, size, size)), diagonal=1).type(torch.int)
+	# for causal mask, we only want to keep values in lower-half matrix
+	return mask == 0
+
 class EnFrDataset(Dataset):
 	def __init__(self, ds, tokenizer_src, tokenizer_target, src_language, target_language, seq_len):
 		super().__init__()
@@ -18,13 +23,6 @@ class EnFrDataset(Dataset):
 			
 	def __len__(self):
 		return len(self.ds)
-
-
-	@staticmethod
-	def causal_mask(size):
-		mask = torch.triu(torch.ones((1, size, size)), diagonal=1).type(torch.int)
-		# for causal mask, we only want to keep values in lower-half matrix
-		return mask == 0
 
 
 	def __getitem__(self, idx):
@@ -78,7 +76,7 @@ class EnFrDataset(Dataset):
 		
 		# generate mask needed for encoder and decoder
 		encoder_mask = (encoder_input != self.pad_token).unsqueeze(0).unsqueeze(0).int()
-		decoder_mask = (decoder_input != self.pad_token).unsqueeze(0).int() & EnFrDataset.causal_mask(decoder_input.size(0))
+		decoder_mask = (decoder_input != self.pad_token).unsqueeze(0).int() & causal_mask(decoder_input.size(0))
 		
 		return {
 			"encoder_input": encoder_input,
